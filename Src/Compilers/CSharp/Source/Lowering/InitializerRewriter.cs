@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -43,11 +43,21 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                         Debug.Assert(syntax is ExpressionSyntax); // Should be the initial value.
                         Debug.Assert(syntax.Parent.Kind == SyntaxKind.EqualsValueClause);
-                        Debug.Assert(syntax.Parent.Parent.Kind == SyntaxKind.VariableDeclarator);
-                        Debug.Assert(syntax.Parent.Parent.Parent.Kind == SyntaxKind.VariableDeclaration);
+                        switch (syntax.Parent.Parent.Kind)
+                        {
+                            case SyntaxKind.VariableDeclarator:
+                                var declaratorSyntax = (VariableDeclaratorSyntax)syntax.Parent.Parent;
+                                boundStatements[i] = LocalRewriter.AddSequencePoint(declaratorSyntax, boundStatements[i]);
+                                break;
 
-                        var declaratorSyntax = (VariableDeclaratorSyntax)syntax.Parent.Parent;
-                        boundStatements[i] = LocalRewriter.AddSequencePoint(declaratorSyntax, boundStatements[i]);
+                            case SyntaxKind.PropertyDeclaration:
+                                var declaration = (PropertyDeclarationSyntax)syntax.Parent.Parent;
+                                boundStatements[i] = LocalRewriter.AddSequencePoint(declaration, boundStatements[i]);
+                                break;
+
+                            default:
+                                throw ExceptionUtilities.Unreachable;
+                        }
                         break;
 
                     case BoundKind.GlobalStatementInitializer:

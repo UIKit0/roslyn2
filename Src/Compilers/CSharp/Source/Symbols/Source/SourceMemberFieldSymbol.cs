@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using Microsoft.CodeAnalysis.CSharp.Emit;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -14,6 +14,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
     internal class SourceMemberFieldSymbol : SourceFieldSymbol
     {
         private readonly DeclarationModifiers modifiers;
+        private readonly bool hasInitializer;
 
         private TypeSymbol lazyType;
 
@@ -32,6 +33,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             : base(containingType, declarator.Identifier.ValueText, declarator.GetReference(), declarator.Identifier.GetLocation())
         {
             this.modifiers = modifiers;
+            this.hasInitializer = declarator.Initializer != null;
 
             this.CheckAccessibility(diagnostics);
 
@@ -88,23 +90,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
                 diagnostics.Add(ErrorCode.ERR_BadConstType, constToken.GetLocation(), type);
             }
-            else
+            else if (IsVolatile && !type.IsValidVolatileFieldType())
             {
-                if (ContainingType.TypeKind == TypeKind.Struct && !IsStatic && !IsConst)
-                {
-                    var initializerOpt = declarator.Initializer;
-                    if (initializerOpt != null)
-                    {
-                        // '{0}': cannot have instance field initializers in structs
-                        diagnostics.Add(ErrorCode.ERR_FieldInitializerInStruct, this.Location, this);
-                    }
-                }
 
-                if (IsVolatile && !type.IsValidVolatileFieldType())
-                {
                     // '{0}': a volatile field cannot be of the type '{1}'
                     diagnostics.Add(ErrorCode.ERR_VolatileStruct, this.Location, this, type);
-                }
             }
 
             HashSet<DiagnosticInfo> useSiteDiagnostics = null;
@@ -115,6 +105,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
 
             diagnostics.Add(this.Location, useSiteDiagnostics);
+        }
+
+        public bool HasInitializer
+        {
+            get { return hasInitializer; }
         }
 
         public VariableDeclaratorSyntax VariableDeclaratorNode

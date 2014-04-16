@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using System;
 using System.Collections.Concurrent;
@@ -781,6 +781,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 null;
                         }
 
+                    case SyntaxKind.PropertyDeclaration:
+                        {
+                            var propertyDecl = (PropertyDeclarationSyntax)memberDecl;
+                            return (propertyDecl.Initializer != null) ?
+                                    GetOrAddModelIfContains(propertyDecl.Initializer, span) :
+                                    null;
+                        }
+
                     case SyntaxKind.GetAccessorDeclaration:
                     case SyntaxKind.SetAccessorDeclaration:
                     case SyntaxKind.AddAccessorDeclaration:
@@ -898,6 +906,17 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     GetFieldInitializerBinder(fieldSymbol, outer));
                             }
 
+                        case SyntaxKind.PropertyDeclaration:
+                            {
+                                var propertyDecl = (PropertyDeclarationSyntax)node.Parent;
+                                var propertySymbol = (SourcePropertySymbol)GetDeclaredSymbol(propertyDecl);
+                                return InitializerSemanticModel.Create(
+                                    this.Compilation,
+                                    propertyDecl,
+                                    propertySymbol,
+                                    GetPropertyInitializerBinder(propertySymbol, outer));
+                            }
+
                         case SyntaxKind.Parameter:
                             {
                                 // NOTE: we don't need to create a member model for lambda parameter default value
@@ -1003,6 +1022,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             return null;
         }
+
+        private Binder GetPropertyInitializerBinder(PropertySymbol propertySymbol, Binder outer)
+        {
+            BinderFlags flags = outer.Flags | BinderFlags.AutoPropertyInitializer;
+
+            return new LocalScopeBinder(outer).WithAdditionalFlagsAndContainingMemberOrLambda(flags, propertySymbol);
+        }
+
 
         private Binder GetFieldInitializerBinder(FieldSymbol fieldSymbol, Binder outer)
         {

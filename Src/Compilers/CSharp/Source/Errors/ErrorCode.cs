@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -572,7 +572,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_LambdaInIsAs = 837,
         ERR_ExpressionTreeContainsMultiDimensionalArrayInitializer = 838,
         ERR_MissingArgument = 839,
-        ERR_AutoPropertiesMustHaveBothAccessors = 840,
+        //ERR_AutoPropertiesMustHaveBothAccessors = 840,
         ERR_VariableUsedBeforeDeclaration = 841,
         ERR_ExplicitLayoutAndAutoImplementedProperty = 842,
         ERR_UnassignedThisAutoProperty = 843,
@@ -1259,6 +1259,13 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_NoAnalyzerInAssembly = 8033,
         WRN_UnableToLoadAnalyzer = 8034,
         ERR_CantReadRulesetFile = 8035,
+
+        ERR_InitializerOnNonAutoProperty = 8036,
+        ERR_AutoPropertyMustHaveSetOrInitializer = 8037,
+        ERR_AutoPropertyMustHaveGetAccessor = 8038,
+        ERR_AutoPropertyInitializerInInterface = 8039,
+
+        ERR_InitializerInStructWithoutExplicitConstructor = 8040,
 
         // Values in the range 10000-14000 are used for "Code Analysis" issues previously reported by FXCop
         WRN_CA2000_DisposeObjectsBeforeLosingScope1 = 10000,

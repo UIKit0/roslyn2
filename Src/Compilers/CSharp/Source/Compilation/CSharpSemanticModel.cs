@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using System;
 using System.Collections.Generic;
@@ -3130,7 +3130,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                             thisParam = containingMember.EnclosingThisSymbol();
                             break;
 
+                        // Fields and properties can't access 'this' since
+                        // initializers are run in the constructor    
                         case SymbolKind.Field:
+                        case SymbolKind.Property:
                             resultKind = LookupResultKind.NotReferencable;
                             thisParam = containingMember.EnclosingThisSymbol() ?? new ThisParameterSymbol(null, containingType);
                             break;
