@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using System;
 using System.Collections.Generic;
@@ -32,12 +32,6 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             var diagnostics = DiagnosticBag.GetInstance();
             try
             {
-                var block = Compiler.BindMethodBody(method, diagnostics);
-                if ((block == null) || !lower)
-                {
-                    return block;
-                }
-
                 // Provide an Emit.Module so that the lowering passes will be run
                 var module = new PEAssemblyBuilder(
                     (SourceAssemblySymbol)compilation.Assembly,
@@ -48,6 +42,12 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     assemblySymbolMapper: null);
 
                 TypeCompilationState compilationState = new TypeCompilationState(method.ContainingType, module);
+
+                var block = Compiler.BindMethodBody(method, compilationState, diagnostics);
+                if ((block == null) || !lower)
+                {
+                    return block;
+                }
 
                 var body = Compiler.LowerStatement(
                     generateDebugInfo: true,

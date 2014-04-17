@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 #if DEBUG
 //#define CHECK_LOCALS // define CHECK_LOCALS to help debug some rewriting problems that would otherwise cause code-gen failures
@@ -315,7 +315,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             CSharpSyntaxNode syntax = node.Syntax;
 
             // assign new frame to the frame variable
-            CompilationState.AddGeneratedMethod(frame.Constructor, FlowAnalysisPass.AppendImplicitReturn(Compiler.BindMethodBody(frame.Constructor, null), frame.Constructor));
+            CompilationState.AddGeneratedMethod(frame.Constructor, FlowAnalysisPass.AppendImplicitReturn(Compiler.BindMethodBody(frame.Constructor, CompilationState, null), frame.Constructor));
 
             var prologue = ArrayBuilder<BoundExpression>.GetInstance();
 

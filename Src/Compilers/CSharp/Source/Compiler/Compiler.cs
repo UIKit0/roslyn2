@@ -419,7 +419,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         }
 
                         BoundInitializer boundInitializer = BindFieldInitializer(
-                            new LocalScopeBinder(parentBinder).WithAdditionalFlagsAndContainingMemberOrLambda(parentBinder.Flags | BinderFlags.FieldInitializer, fieldSymbol),
+                            new LocalScopeBinder(parentBinder.WithPrimaryConstructorParametersIfNecessary(fieldSymbol.ContainingType, shadowBackingFields: true)).
+                                            WithAdditionalFlagsAndContainingMemberOrLambda(parentBinder.Flags | BinderFlags.FieldInitializer, fieldSymbol),
                             fieldSymbol,
                             (EqualsValueClauseSyntax)initializerNode,
                             diagnostics);
@@ -571,14 +572,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         #region Method Body Binding
 
         // NOTE: can return null if the method has no body.
-        internal static BoundBlock BindMethodBody(MethodSymbol method, DiagnosticBag diagnostics)
+        internal static BoundBlock BindMethodBody(MethodSymbol method, TypeCompilationState compilationState, DiagnosticBag diagnostics)
         {
             ConsList<Imports> unused;
-            return BindMethodBody(method, diagnostics, false, out unused);
+            return BindMethodBody(method, compilationState, diagnostics, false, out unused);
         }
 
         // NOTE: can return null if the method has no body.
-        internal static BoundBlock BindMethodBody(MethodSymbol method, DiagnosticBag diagnostics, bool generateDebugInfo, out ConsList<Imports> debugImports)
+        internal static BoundBlock BindMethodBody(MethodSymbol method, TypeCompilationState compilationState, DiagnosticBag diagnostics, bool generateDebugInfo, out ConsList<Imports> debugImports)
         {
             debugImports = null;
 
@@ -606,17 +607,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 var blockSyntax = sourceMethod.BlockSyntax;
-                if (blockSyntax == null)
+                if (blockSyntax != null)
                 {
-                    var property = sourceMethod.AssociatedSymbol as SourcePropertySymbol;
-                    if ((object)property != null && property.IsAutoProperty)
-                    {
-                        return MethodBodySynthesizer.ConstructAutoPropertyAccessorBody(sourceMethod);
-                    }
-
-                    return null;
-                }
-
                 var factory = compilation.GetBinderFactory(sourceMethod.SyntaxTree);
                 var inMethodBinder = factory.GetBinder(blockSyntax);
                 var binder = new ExecutableCodeBinder(blockSyntax, sourceMethod, inMethodBinder);
@@ -649,6 +641,24 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // error CS1636: __arglist is not allowed in the parameter list of iterators
                         diagnostics.Add(ErrorCode.ERR_VarargsIterator, sourceMethod.Locations[0]);
                     }
+                    }
+                }
+                else // for [if (blockSyntax != null)]
+                {
+                    var property = sourceMethod.AssociatedSymbol as SourcePropertySymbol;
+                    if ((object)property != null && property.IsAutoProperty)
+                    {
+                        return MethodBodySynthesizer.ConstructAutoPropertyAccessorBody(sourceMethod);
+                }
+
+                    if (sourceMethod.IsPrimaryCtor)
+                    {
+                        body = null;
+            }
+            else
+            {
+                        return null;
+                    }
                 }
             }
             else
@@ -674,6 +684,29 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (constructorInitializer != null)
             {
                 statements.Add(constructorInitializer);
+            }
+
+            if ((object)sourceMethod != null && sourceMethod.IsPrimaryCtor && (object)((SourceMemberContainerTypeSymbol)sourceMethod.ContainingType).PrimaryCtor == (object)sourceMethod)
+            {
+                Debug.Assert(method.MethodKind == MethodKind.Constructor && !method.ContainingType.IsDelegateType());
+                Debug.Assert(body == null);
+
+                if (sourceMethod.ParameterCount > 0)
+                {
+                    var factory = new SyntheticBoundNodeFactory(sourceMethod, sourceMethod.SyntaxNode, compilationState, diagnostics);
+                    factory.CurrentMethod = sourceMethod; 
+
+                    foreach (var parameter in sourceMethod.Parameters)
+                    {
+                        FieldSymbol field = parameter.PrimaryConstructorParameterBackingField;
+
+                        if ((object)field != null)
+                        {
+                            statements.Add(factory.Assignment(factory.Field(factory.This(), field),
+                                                                   factory.Parameter(parameter)));
+                        }
+                    }
+                }
             }
 
             if (body != null)
@@ -711,12 +744,64 @@ namespace Microsoft.CodeAnalysis.CSharp
             NamedTypeSymbol baseType = constructor.ContainingType.BaseTypeNoUseSiteDiagnostics;
 
             SourceMethodSymbol sourceConstructor = constructor as SourceMethodSymbol;
-            ConstructorDeclarationSyntax constructorSyntax = null;
-            ConstructorInitializerSyntax initializerSyntaxOpt = null;
+            CSharpSyntaxNode syntax = null;
+            ArgumentListSyntax initializerArgumentListOpt = null;
             if ((object)sourceConstructor != null)
             {
-                constructorSyntax = (ConstructorDeclarationSyntax)sourceConstructor.SyntaxNode;
-                initializerSyntaxOpt = constructorSyntax.Initializer;
+                syntax = sourceConstructor.SyntaxNode;
+
+                if (syntax.Kind == SyntaxKind.ConstructorDeclaration)
+                {
+                    var constructorSyntax = (ConstructorDeclarationSyntax)syntax;
+                    if (constructorSyntax.Initializer != null)
+                    {
+                        initializerArgumentListOpt = constructorSyntax.Initializer.ArgumentList;
+                    }
+
+                    ErrorCode reportIfHavePrimaryCtor = ErrorCode.Void;
+
+                    if (initializerArgumentListOpt == null || initializerArgumentListOpt.Parent.Kind != SyntaxKind.ThisConstructorInitializer)
+                    {
+                        reportIfHavePrimaryCtor = ErrorCode.ERR_InstanceCtorMustHaveThisInitializer;
+                    }
+                    else if (initializerArgumentListOpt.Arguments.Count == 0 && constructor.ContainingType.TypeKind == TypeKind.Struct)
+                    {
+                        // Based on C# Design Notes for Oct 21, 2013:
+                        reportIfHavePrimaryCtor = ErrorCode.ERR_InstanceCtorCannotHaveDefaultThisInitializer;
+                    }
+
+                    if (reportIfHavePrimaryCtor != ErrorCode.Void)
+                    {
+                        var container = constructor.ContainingType as SourceMemberContainerTypeSymbol;
+
+                        if ((object)container != null && (object)container.PrimaryCtor != null)
+                        {
+                            diagnostics.Add(reportIfHavePrimaryCtor, constructor.Locations[0]);
+                        }
+                    }
+                }
+                else 
+                {
+                    // Primary constuctor case.
+                    Debug.Assert(syntax.Kind == SyntaxKind.ParameterList);
+                    if (syntax.Parent.Kind == SyntaxKind.ClassDeclaration)
+                    {
+                        var classDecl = (ClassDeclarationSyntax)syntax.Parent;
+
+                        if (classDecl.BaseList != null && classDecl.BaseList.Types.Count > 0)
+                        {
+                            TypeSyntax baseTypeSyntax = classDecl.BaseList.Types[0];
+                            if (baseTypeSyntax.Kind == SyntaxKind.BaseClassWithArguments)
+                            {
+                                initializerArgumentListOpt = ((BaseClassWithArgumentsSyntax)baseTypeSyntax).ArgumentList;
+                            }
+                        }
+                    }
+                    else
+            {
+                        Debug.Assert(syntax.Parent.Kind == SyntaxKind.StructDeclaration);
+                    }
+                }
             }
 
             // The common case is that we have no constructor initializer and the type inherits directly from object.
@@ -725,7 +810,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             // constructor syntax so that we can do unnecessary overload resolution on the non-existing initializer!
             // Simply take the early out: bind directly to the parameterless object ctor rather than attempting
             // overload resolution.
-            if (initializerSyntaxOpt == null && (object)baseType != null)
+            if (initializerArgumentListOpt == null && (object)baseType != null)
             {
                 if (baseType.SpecialType == SpecialType.System_Object)
                 {
@@ -807,22 +892,24 @@ namespace Microsoft.CodeAnalysis.CSharp
 
                 outerBinder = compilation.GetBinderFactory(containerNode.SyntaxTree).GetBinder(containerNode, bodyToken.Position);
             }
-            else if (initializerSyntaxOpt == null)
+            else if (initializerArgumentListOpt == null)
             {
                 // We have a ctor in source but no explicit constructor initializer.  We can't just use the binder for the
                 // type containing the ctor because the ctor might be marked unsafe.  Use the binder for the parameter list
                 // as an approximation - the extra symbols won't matter because there are no identifiers to bind.
 
-                outerBinder = compilation.GetBinderFactory(sourceConstructor.SyntaxTree).GetBinder(constructorSyntax.ParameterList);
+                outerBinder = compilation.GetBinderFactory(sourceConstructor.SyntaxTree).GetBinder(syntax.Kind == SyntaxKind.ParameterList ? 
+                                                                                                        syntax :
+                                                                                                        ((ConstructorDeclarationSyntax)syntax).ParameterList);
             }
             else
             {
-                outerBinder = compilation.GetBinderFactory(sourceConstructor.SyntaxTree).GetBinder(initializerSyntaxOpt);
+                outerBinder = compilation.GetBinderFactory(sourceConstructor.SyntaxTree).GetBinder(initializerArgumentListOpt);
             }
 
             //wrap in ConstructorInitializerBinder for appropriate errors
             Binder initializerBinder = outerBinder.WithAdditionalFlagsAndContainingMemberOrLambda(BinderFlags.ConstructorInitializer, constructor);
-            return initializerBinder.BindConstructorInitializer(initializerSyntaxOpt, constructor, diagnostics);
+            return initializerBinder.BindConstructorInitializer(initializerArgumentListOpt, constructor, diagnostics);
         }
 
         internal static BoundCall GenerateObjectConstructorInitializer(MethodSymbol constructor, DiagnosticBag diagnostics)

@@ -1,4 +1,4 @@
-﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
 using System;
 using System.Collections.Generic;
@@ -25,7 +25,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
                     continue;
                 }
 
-                var boundBody = Compiler.BindMethodBody(sourceSymbol, new DiagnosticBag());
+                var boundBody = Compiler.BindMethodBody(sourceSymbol, new TypeCompilationState(sourceSymbol.ContainingType, null), new DiagnosticBag());
                 if (boundBody != null)
                 {
                     FlowAnalysisPass.Rewrite(sourceSymbol, boundBody, flowDiagnostics);

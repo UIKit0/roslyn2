@@ -303,6 +303,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             var processedInstanceInitializers = new ProcessedFieldInitializers();
 
             var sourceTypeSymbol = symbol as SourceMemberContainerTypeSymbol;
+
             if ((object)sourceTypeSymbol != null)
             {
                 BindFieldInitializers(sourceTypeSymbol, scriptCtor, sourceTypeSymbol.StaticInitializers, this.generateDebugInfo, ref processedStaticInitializers);
@@ -713,6 +714,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             try
             {
                 bool includeInitializersInBody;
+                bool isPrimaryCtor = false;
                 BoundBlock body;
 
                 // if synthesized method returns its body in lowered form
@@ -728,14 +730,14 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
 
                 //EDMAURER initializers that have been analyzed but not yet lowered.
-                BoundStatementList analyzedInitializers = null;
+                BoundTypeOrInstanceInitializers analyzedInitializers = null;
 
                 ConsList<Imports> debugImports;
 
                 if (methodSymbol.IsScriptConstructor)
                 {
                     // rewrite top-level statements and script variable declarations to a list of statements and assignments, respectively:
-                    BoundStatementList initializerStatements = InitializerRewriter.Rewrite(processedInitializers.BoundInitializers, methodSymbol);
+                    BoundTypeOrInstanceInitializers initializerStatements = InitializerRewriter.Rewrite(processedInitializers.BoundInitializers, methodSymbol);
 
                     // the lowered script initializers should not be treated as initializers anymore but as a method body:
                     body = new BoundBlock(initializerStatements.Syntax, ImmutableArray<LocalSymbol>.Empty, initializerStatements.Statements) { WasCompilerGenerated = true };
@@ -745,8 +747,19 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
                 else
                 {
-                    // do not emit initializers if we are invoking another constructor of this class:
-                    includeInitializersInBody = !processedInitializers.BoundInitializers.IsDefaultOrEmpty && !HasThisConstructorInitializer(methodSymbol);
+                    // Do not emit initializers if we are invoking another constructor of this class.
+
+                    // Also, in presence of primary constructor, do not process initializers for a non-primary instance constructor.
+                    // Even when non-primary instance constructor doesn't invoke another constructor of this class, this is an error
+                    // condition which is reported elsewhere. 
+                    SourceMemberContainerTypeSymbol container = methodSymbol.ContainingType as SourceMemberContainerTypeSymbol;
+                    isPrimaryCtor = ((object)container != null && (object)container.PrimaryCtor == (object)methodSymbol);
+                    includeInitializersInBody = !processedInitializers.BoundInitializers.IsDefaultOrEmpty && 
+                                                !HasThisConstructorInitializer(methodSymbol) &&
+                                                (methodSymbol.IsStatic || 
+                                                 isPrimaryCtor || (object)container == null || (object)container.PrimaryCtor == null);
+
+                    body = Compiler.BindMethodBody(methodSymbol, compilationState, diagsForCurrentMethod, this.generateDebugInfo, out debugImports);
 
                     // lower initializers just once. the lowered tree will be reused when emitting all constructors 
                     // with field initializers. Once lowered, these initializers will be stashed in processedInitializers.LoweredInitializers
@@ -757,13 +770,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                         analyzedInitializers = InitializerRewriter.Rewrite(processedInitializers.BoundInitializers, methodSymbol);
                         processedInitializers.HasErrors = processedInitializers.HasErrors || analyzedInitializers.HasAnyErrors;
 
-                        // These analyses check for diagnostics in lambdas.
-                        // Control flow analysis and implicit return insertion are unnecessary.
-                        DataFlowPass.Analyze(compilation, methodSymbol, analyzedInitializers, diagsForCurrentMethod, requireOutParamsAssigned: false);
-                        DiagnosticsPass.IssueDiagnostics(compilation, analyzedInitializers, diagsForCurrentMethod, methodSymbol);
+                        if (body == null || !isPrimaryCtor)
+                        {
+                            // These analyses check for diagnostics in lambdas.
+                            // Control flow analysis and implicit return insertion are unnecessary.
+                            DataFlowPass.Analyze(compilation, methodSymbol, analyzedInitializers, diagsForCurrentMethod, requireOutParamsAssigned: false);
+                            DiagnosticsPass.IssueDiagnostics(compilation, analyzedInitializers, diagsForCurrentMethod, methodSymbol);
+                        }
+                        else 
+                        {
+                            // In order to get correct diagnostics, we need to analyze initializers and the body together.
+                            // We will not be repeating this analysis for other constructors.
+                            body = body.Update(body.LocalsOpt, body.Statements.Insert(0, analyzedInitializers));
+                            includeInitializersInBody = false;
+                            analyzedInitializers = null;
+                        }
                     }
-
-                    body = Compiler.BindMethodBody(methodSymbol, diagsForCurrentMethod, this.generateDebugInfo, out debugImports);
                 }
 
 #if DEBUG
@@ -786,7 +808,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 // Associate these debug imports with all methods generated from this one.
                 compilationState.CurrentDebugImports = debugImports;
 
-                if (body != null && methodSymbol is SourceMethodSymbol)
+                if (body != null && (object)sourceMethod != null)
                 {
                     // TODO: Do we need to issue warnings for non-SourceMethodSymbol methods, like synthesized ctors?
                     DiagnosticsPass.IssueDiagnostics(compilation, body, diagsForCurrentMethod, methodSymbol);
@@ -871,6 +893,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 compilationState,
                                 diagsForCurrentMethod);
 
+                            Debug.Assert(processedInitializers.LoweredInitializers.Kind == BoundKind.StatementList);
                             Debug.Assert(!hasErrors);
                             hasErrors = processedInitializers.LoweredInitializers.HasAnyErrors || diagsForCurrentMethod.HasAnyErrors();
                             SetGlobalErrorIfTrue(hasErrors);
@@ -885,46 +908,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                         // initializers for global code have already been included in the body
                         if (includeInitializersInBody)
                         {
-                            //TODO: rewrite any BoundThis and BoundBase nodes in the initializers to have the correct ThisParameter symbol
-                            if (compilation.Options.Optimize)
-                            {
-                                // TODO: this part may conflict with InitializerRewriter.Rewrite in how it handles 
-                                //       the first field initializer (see 'if (i == 0)'...) which seems suspicious
-                                ArrayBuilder<BoundStatement> statements = ArrayBuilder<BoundStatement>.GetInstance();
-                                statements.AddRange(boundStatements);
-                                bool anyNonDefault = false;
-
-                                foreach (var initializer in processedInitializers.LoweredInitializers.Statements)
-                                {
-                                    if (ShouldOptimizeOutInitializer(initializer))
-                                    {
-                                        if (methodSymbol.IsStatic)
-                                        {
-                                            // NOTE: Dev11 removes static initializers if ONLY all of them are optimized out
-                                            statements.Add(initializer);
-                                        }
-                                    }
-                                    else
-                                    {
-                                        statements.Add(initializer);
-                                        anyNonDefault = true;
-                                    }
-                                }
-
-                                if (anyNonDefault)
-                                {
-                                    boundStatements = statements.ToImmutableAndFree();
-                                }
-                                else
-                                {
-                                    statements.Free();
-                                }
-                            }
-                            else
-                            {
                                 boundStatements = boundStatements.Concat(processedInitializers.LoweredInitializers.Statements);
                             }
-                        }
 
                         if (hasBody)
                         {
@@ -955,41 +940,6 @@ namespace Microsoft.CodeAnalysis.CSharp
                 diagsForCurrentMethod.Free();
                 compilationState.CurrentDebugImports = oldDebugImports;
             }
-        }
-
-        /// <summary>
-        /// Returns true if the initializer is a field initializer which should be optimized out
-        /// </summary>
-        private static bool ShouldOptimizeOutInitializer(BoundStatement initializer)
-        {
-            BoundStatement statement = initializer;
-
-            if (initializer.Kind == BoundKind.SequencePointWithSpan)
-            {
-                statement = ((BoundSequencePointWithSpan)initializer).StatementOpt;
-            }
-            else if (initializer.Kind == BoundKind.SequencePoint)
-            {
-                statement = ((BoundSequencePoint)initializer).StatementOpt;
-            }
-
-            if (statement == null || statement.Kind != BoundKind.ExpressionStatement)
-            {
-                Debug.Assert(false, "initializer does not initialize a field?");
-                return false;
-            }
-
-            BoundAssignmentOperator assignment = ((BoundExpressionStatement)statement).Expression as BoundAssignmentOperator;
-            if (assignment == null)
-            {
-                Debug.Assert(false, "initializer does not initialize a field?");
-                return false;
-            }
-
-            Debug.Assert(assignment.Left.Kind == BoundKind.FieldAccess);
-
-            BoundExpression rhs = assignment.Right;
-            return rhs.IsDefaultValue();
         }
 
         /// <summary>
