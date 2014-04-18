@@ -12756,7 +12756,14 @@ public class A : Attribute
     }
 
 }")
-                .VerifyDiagnostics(Diagnostic(ErrorCode.ERR_InvalidExprTerm, "string").WithArguments("string"));
+                .VerifyDiagnostics(
+    // (4,25): error CS1001: Identifier expected
+    //         bool b = string is string;
+    Diagnostic(ErrorCode.ERR_IdentifierExpected, "is").WithLocation(4, 25),
+    // (4,18): error CS0165: Use of unassigned local variable ''
+    //         bool b = string is string;
+    Diagnostic(ErrorCode.ERR_UseDefViolation, "string ").WithArguments("").WithLocation(4, 18)
+                );
         }
 
         [WorkItem(543167, "DevDiv")]

@@ -18624,7 +18624,9 @@ static class A
 ";
             DiagnosticsUtils.VerifyErrorsAndGetCompilationWithMscorlib(text,
                 new ErrorDescription { Code = (int)ErrorCode.ERR_InvalidAnonymousTypeMemberDeclarator, Line = 3, Column = 22 },
-                new ErrorDescription { Code = (int)ErrorCode.ERR_InvalidExprTerm, Line = 3, Column = 25 },
+                new ErrorDescription { Code = (int)ErrorCode.ERR_DeclarationExpressionOutsideOfAMethodBody, Line = 3, Column = 25 },
+                new ErrorDescription { Code = (int)ErrorCode.ERR_UseDefViolation, Line = 3, Column = 25 },
+                new ErrorDescription { Code = (int)ErrorCode.ERR_IdentifierExpected, Line = 3, Column = 28 },
                 new ErrorDescription { Code = (int)ErrorCode.ERR_InvalidExprTerm, Line = 3, Column = 30 }
             );
         }

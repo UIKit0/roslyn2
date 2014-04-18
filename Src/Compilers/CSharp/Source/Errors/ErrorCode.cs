@@ -1260,6 +1260,11 @@ namespace Microsoft.CodeAnalysis.CSharp
         WRN_UnableToLoadAnalyzer = 8034,
         ERR_CantReadRulesetFile = 8035,
 
+        // TODO: Adjust numbers of the following errors once Declaration Expressions are RI-ed into Main.
+        ERR_DeclarationExpressionOutsideOfAMethodBody = 8201,
+
+        ERR_VariableUsedInTheSameArgumentList = 8202,
+
         // Values in the range 10000-14000 are used for "Code Analysis" issues previously reported by FXCop
         WRN_CA2000_DisposeObjectsBeforeLosingScope1 = 10000,
         WRN_CA2000_DisposeObjectsBeforeLosingScope2 = 10001,
