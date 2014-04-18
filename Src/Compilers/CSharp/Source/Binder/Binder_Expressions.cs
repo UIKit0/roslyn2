@@ -2548,7 +2548,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     newArguments.AddRange(oldArguments);
 
                     do
-                {
+                    {
                         BoundExpression oldArgument = newArguments[i];
 
                         if (i < parameterCount)
@@ -2556,18 +2556,18 @@ namespace Microsoft.CodeAnalysis.CSharp
                             switch (oldArgument.Kind)
                             {
                                 case BoundKind.UnboundLambda:
-                    NamedTypeSymbol parameterType = parameters[i].Type as NamedTypeSymbol;
-                    if ((object)parameterType != null)
-                    {
+                                    NamedTypeSymbol parameterType = parameters[i].Type as NamedTypeSymbol;
+                                    if ((object)parameterType != null)
+                                    {
                                         newArguments[i] = ((UnboundLambda)oldArgument).Bind(parameterType);
-                    }
+                                    }
                                     break;
 
                                 case BoundKind.UninitializedVarDeclarationExpression:
                                     newArguments[i] = ((UninitializedVarDeclarationExpression)oldArgument).SetInferredType(parameters[i].Type, success: true);
                                     break;
-                }
-            }
+                            }
+                        }
                         else if (oldArgument.Kind == BoundKind.UninitializedVarDeclarationExpression)
                         {
                             newArguments[i] = ((UninitializedVarDeclarationExpression)oldArgument).FailInference(this, null);
@@ -2577,8 +2577,8 @@ namespace Microsoft.CodeAnalysis.CSharp
                     }
                     while (i < argumentCount);
 
-            return newArguments.ToImmutableAndFree();
-        }
+                    return newArguments.ToImmutableAndFree();
+                }
             }
 
             return oldArguments.ToImmutable();
@@ -2890,10 +2890,26 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
                 else if (argument.Kind == BoundKind.UninitializedVarDeclarationExpression)
                 {
-                    arguments[arg] = ((UninitializedVarDeclarationExpression)argument).SetInferredType(GetCorrespondingParameterType(ref result, parameters, arg), success: true);
+                    TypeSymbol parameterType = GetCorrespondingParameterType(ref result, parameters, arg);
+                    bool hasErrors = false;
+
+                    if (this.ContainingMemberOrLambda.Kind == SymbolKind.Method
+                        && ((MethodSymbol)this.ContainingMemberOrLambda).IsAsync
+                        && parameterType.IsRestrictedType())
+                    {
+                        Error(diagnostics, ErrorCode.ERR_BadSpecialByRefLocal, 
+                              argument.Syntax.CSharpKind() == SyntaxKind.DeclarationExpression ?
+                                    ((DeclarationExpressionSyntax)argument.Syntax).Type :
+                                    argument.Syntax, 
+                              parameterType);
+
+                        hasErrors = true;
+                    }
+
+                    arguments[arg] = ((UninitializedVarDeclarationExpression)argument).SetInferredType(parameterType, success: !hasErrors);
                 }
             }
-            }
+        }
 
         private static TypeSymbol GetCorrespondingParameterType(ref MemberAnalysisResult result, ImmutableArray<ParameterSymbol> parameters, int arg)
         {
