@@ -3842,7 +3842,7 @@ public class Cls
     Diagnostic(ErrorCode.WRN_UnreferencedVar, "b2").WithArguments("b2").WithLocation(40, 46));
         }
 
-        [Fact(Skip = "867929")]
+        [Fact]
         public void CatchFilter_05()
         {
             var text = @"
