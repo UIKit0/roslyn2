@@ -8381,6 +8381,7 @@ interface IC { }
 ";
             ParseAndValidate(test,
                 new ErrorDescription { Code = 1525, Line = 2, Column = 1 },
+                new ErrorDescription { Code = 1002, Line = 2, Column = 10 },
                 new ErrorDescription { Code = 1525, Line = 2, Column = 25 },
                 new ErrorDescription { Code = 1525, Line = 2, Column = 26 },
                 new ErrorDescription { Code = 1733, Line = 2, Column = 35 },
