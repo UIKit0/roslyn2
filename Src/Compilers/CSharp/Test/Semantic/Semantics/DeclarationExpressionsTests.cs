@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// Copyright (c) Microsoft Open Technologies, Inc.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
+
+using System.Collections.Generic;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.CSharp.Test.Utilities;
@@ -5020,6 +5022,105 @@ class C
         //         System.Console.WriteLine(z);
         Diagnostic(ErrorCode.ERR_NameNotInContext, "z").WithArguments("z").WithLocation(13, 34)
                 );
+        }
+
+        [Fact, WorkItem(6)]
+        public void InConstructorInitializer_01()
+        {
+            var text = @"
+public class Cls
+{
+    public static void Main()
+    {
+        var x = new Derived();
+    }
+}
+
+class Base
+{
+    public Base(int x)
+    { 
+        System.Console.WriteLine(""Base: {0}"", x);
+    }
+}
+
+class Derived : Base 
+{
+    public Derived() : base(int x = 123)
+    { 
+        //System.Console.WriteLine(""Derived: {0}"", x);
+    }
+}";
+            var compilation = CreateCompilationWithMscorlib(text, compOptions: TestOptions.Exe);
+
+            CompileAndVerify(compilation, expectedOutput: @"Base: 123").VerifyDiagnostics();
+        }
+
+        [Fact, WorkItem(6)]
+        public void InConstructorInitializer_02()
+        {
+            var text = @"
+public class Cls
+{
+    public static void Main()
+    {
+        var x = new Derived();
+    }
+}
+
+class Base
+{
+    public Base(out int x)
+    { 
+        x = 123;
+    }
+}
+
+class Derived : Base 
+{
+    public Derived() : base(out var x)
+    { 
+        System.Console.WriteLine(""Derived: {0}"", x);
+    }
+}";
+            var compilation = CreateCompilationWithMscorlib(text, compOptions: TestOptions.Exe);
+
+            CompileAndVerify(compilation, expectedOutput: @"Derived: 123").VerifyDiagnostics();
+        }
+
+        [Fact, WorkItem(6)]
+        public void InConstructorInitializer_03()
+        {
+            var text = @"
+public class Cls
+{
+    public static void Main()
+    {
+        var x = new Derived();
+    }
+}
+
+class Base
+{
+    public Base(int x)
+    { 
+        System.Console.WriteLine(""Base: {0}"", x);
+    }
+}
+
+class Derived : Base 
+{
+    private int y = 124;
+
+    public Derived() : base(int x = 123)
+    { 
+        System.Console.WriteLine(""Derived: {0}"", x + y);
+    }
+}";
+            var compilation = CreateCompilationWithMscorlib(text, compOptions: TestOptions.Exe);
+
+            CompileAndVerify(compilation, expectedOutput: @"Base: 123
+Derived: 247").VerifyDiagnostics();
         }
 
     }

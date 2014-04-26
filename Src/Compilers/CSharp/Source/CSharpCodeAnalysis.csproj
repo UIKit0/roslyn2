@@ -54,7 +54,8 @@
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
   </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' "></PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+  </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|ARM' ">
     <DefineConstants>TRACE;DEBUG</DefineConstants>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
@@ -188,6 +189,7 @@
     <Compile Include="Binder\UsingStatementBinder.cs" />
     <Compile Include="Binder\WhileBinder.cs" />
     <Compile Include="Binder\WithClassTypeParametersBinder.cs" />
+    <Compile Include="Binder\WithConstructorInitializerLocalsBinder.cs" />
     <Compile Include="Binder\WithCrefTypeParametersBinder.cs" />
     <Compile Include="Binder\WithLambdaParametersBinder.cs" />
     <Compile Include="Binder\WithMethodTypeParametersBinder.cs" />

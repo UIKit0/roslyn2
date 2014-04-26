@@ -178,6 +178,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                             Debug.Assert(method.Arity == 0, "Generic Ctor, What to do?");
 
                             resultBinder = new InMethodBinder(method, resultBinder);
+
+                            if (parent.Initializer != null)
+                            {
+                                resultBinder = new WithConstructorInitializerLocalsBinder(method, resultBinder, parent);
+                            }
                         }
                     }
 
