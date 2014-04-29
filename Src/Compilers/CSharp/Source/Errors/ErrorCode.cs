@@ -1272,6 +1272,7 @@ namespace Microsoft.CodeAnalysis.CSharp
         ERR_StaticParamMod = 9010,
         ERR_ParamMissingAccessMod = 9011,
         ERR_RefOutParameterWithFieldModifier = 9012,
+        ERR_ImplementedInterfaceWithArguments = 9013,
 
         // Values in the range 10000-14000 are used for "Code Analysis" issues previously reported by FXCop
         WRN_CA2000_DisposeObjectsBeforeLosingScope1 = 10000,
