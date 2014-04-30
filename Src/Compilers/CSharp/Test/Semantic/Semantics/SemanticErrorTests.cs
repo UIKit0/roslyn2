@@ -7413,8 +7413,9 @@ class Test
 }
 ";
             CreateCompilationWithMscorlib(text).VerifyDiagnostics(
-                // (7,27): error CS0210: You must provide an initializer in a fixed or using statement declaration
-                Diagnostic(ErrorCode.ERR_FixedMustInit, "w"),
+                // (7,14): error CS0165: Use of unassigned local variable 'w'
+                //       using (StreamWriter w) // CS0210
+                Diagnostic(ErrorCode.ERR_UseDefViolation, "StreamWriter w").WithArguments("w").WithLocation(7, 14),
                 // (12,27): error CS0210: You must provide an initializer in a fixed or using statement declaration
                 Diagnostic(ErrorCode.ERR_FixedMustInit, "x"),
                 // (12,30): error CS0210: You must provide an initializer in a fixed or using statement declaration
